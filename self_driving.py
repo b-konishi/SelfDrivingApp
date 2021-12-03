@@ -11,7 +11,7 @@ class SelfDriving:
 
     ARROW = {'up':82,'right':83,'left':81,'bottom':84}
 
-    def __init__(self, window_title='Self-Driving', window_size=(1024,1024), step_deg=10, car_size=(50,70), car_color=(153,102,0), car_sensor_num=200, road_color=(204,204,204), road_width=50):
+    def __init__(self, window_title='Self-Driving', window_size=(1024,1024), step_deg=10, car_color=(150,100,0), car_sensor_num=50, road_color=(204,204,204), road_width=30):
         mode = 'test'
 
         self.drawing = False # true if mouse is pressed
@@ -22,14 +22,18 @@ class SelfDriving:
         self.window_size = window_size
         self.step_deg = step_deg
         self.car_sensor_num = car_sensor_num
-        self.car_size = car_size
         self.car_color = car_color
         self.road_color = road_color
         self.road_width = road_width
+        self.car_size = (road_width//3*2, road_width)
 
         cv2.namedWindow(window_title)
         cv2.setMouseCallback(window_title, self.draw_circle)
 
+        self.model = mp.Multi_perceptron()
+
+    def get_model(self):
+        return self.model
 
     def rotate_coord(self, vec, deg):
         rad = 2*np.pi * deg/360
@@ -45,8 +49,6 @@ class SelfDriving:
 
     # mouse callback function
     def draw_circle(self, event, x, y, flags, param):
-        # global drawing, mode, first_click, start_coord, end_coord, road_width, road_color, second_coord, second_click
-
 
         if event == cv2.EVENT_LBUTTONDOWN:
             if self.first_click:
@@ -111,8 +113,8 @@ class SelfDriving:
         print('Start training')
         print(car_coord, self.car_size, angle, self.car_color)
         cv2.ellipse(img, (car_coord, self.car_size, angle), self.car_color, -1)
-        data = []
-        output = []
+        sensor_input = []
+        desired_operation = []
         while self.mode == 'training':
 
             cv2.imshow(self.window_title, img)
@@ -130,7 +132,6 @@ class SelfDriving:
             _front_y = int(car_coord[1] - self.car_size[1])
             _front = np.array([[x,_front_y] for x in _front_x])
             d = []
-            print('_front: ', _front.shape)
             for coord in _front:
                 front = self.rotate_coord(coord-car_coord, angle).astype(float)
                 front_coord = cv_car_coord+front
@@ -142,7 +143,7 @@ class SelfDriving:
                 d.append(1 if list(img[int(front_coord[1]),int(front_coord[0])])==list(self.road_color) else 0)
                 cv2.circle(img, (front_coord-2).astype(int), 1, (0,255,255), -1)
 
-            data.append(np.array(d))
+            sensor_input.append(np.array(d))
 
             
             # 道の終点に到達したら、trainingモードを終了し、predictionモードへ移行
@@ -160,7 +161,7 @@ class SelfDriving:
                 cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
                 print('angle: ', angle)
 
-                output.append(list(np.eye(3)[2]))
+                desired_operation.append(list(np.eye(3)[2]))
 
             # elif k == ARROW['left']:
             elif k == ord('a'):
@@ -173,21 +174,20 @@ class SelfDriving:
                 cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
                 print('angle: ', angle)
 
-                output.append(list(np.eye(3)[0]))
+                desired_operation.append(list(np.eye(3)[0]))
 
             elif k == ord('e'):
                 sys.exit(0)
 
             else:
-                output.append(list(np.eye(3)[1]))
+                desired_operation.append(list(np.eye(3)[1]))
 
 
-        model = mp.Multi_perceptron(data, output)
-
-        return model
+        self.model.train(sensor_input, desired_operation)
 
 
-    def predict(self, model):
+
+    def predict(self):
 
         print('Make map')
         # print('change map: Mouse-drag')
@@ -253,11 +253,10 @@ class SelfDriving:
                 d.append(1 if list(img[int(front_coord[1]),int(front_coord[0])])==list(self.road_color) else 0)
                 cv2.circle(img, (front_coord-2).astype(int), 1, (0,255,255), -1)
 
-            print(d)
             data.append(d)
 
 
-            out = model.predict(d)
+            out = self.model.predict(d)
             outputs.append(out)
             idx = np.ravel(np.where(out == np.max(out)))
             output = np.zeros(len(out))
@@ -275,7 +274,7 @@ class SelfDriving:
 
                 img = np.copy(origin_img)
                 cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
-                print('angle: ', angle)
+
 
             elif all(output == list(np.eye(3)[0])):
                 angle -= self.step_deg
@@ -298,11 +297,11 @@ class SelfDriving:
 if __name__ == '__main__':
 
 
-    driving = SelfDriving(car_sensor_num=10)
+    driving = SelfDriving(car_sensor_num=10, road_width=30)
 
-    model = driving.train()
-    weight = model.get_weight_avg()
-    predicted_data, predicted_outputs = driving.predict(model)
+    driving.train()
+    weight = driving.get_model().get_weight_avg()
+    predicted_data, predicted_outputs = driving.predict()
 
     print('predicted_data: ', np.array(predicted_data).shape)
     cv2.destroyAllWindows()
