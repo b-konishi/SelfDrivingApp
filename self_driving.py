@@ -30,7 +30,7 @@ class SelfDriving:
         cv2.namedWindow(window_title)
         cv2.setMouseCallback(window_title, self.draw_circle)
 
-        self.model = mp.Multi_perceptron()
+        self.model = mp.MultiPerceptron()
 
     def get_model(self):
         return self.model
