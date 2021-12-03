@@ -40,8 +40,8 @@ class SelfDriving:
         rotate_mat = np.array([[np.cos(rad), -np.sin(rad)],[np.sin(rad), np.cos(rad)]])
         return rotate_mat.dot(vec)
 
-    def put_label(self, img, text, width):
-        cv2.putText(img, text, (int(width/2), 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), thickness=2)
+    def put_label(self, text, x, y):
+        cv2.putText(self.img, text, (x,y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), thickness=2)
 
     def make_image(self):
         self.img = np.zeros((self.window_size[0], self.window_size[1], 3), np.uint8)
@@ -85,25 +85,26 @@ class SelfDriving:
         self.second_click = True
 
         self.make_image()
-        img = self.img
 
         self.mode = 'test'
         while self.mode == 'test':
-            cv2.imshow(self.window_title, img)
+            self.put_label('Making Map', 20, 50)
+
+            cv2.imshow(self.window_title, self.img)
             k = cv2.waitKey(1) & 0xFF
 
             if k != 255:
                 print('key: ', k)
 
             elif k == ord('c'):
-                img = np.zeros((self.window_size[0], self.window_size[1], 3), np.uint8)
+                self.img = np.zeros((self.window_size[0], self.window_size[1], 3), np.uint8)
             elif k == ord('e'):
                 sys.exit(0)
 
         print('Write training map')
-        cv2.imwrite('./training_map2.jpg', img)
+        cv2.imwrite('./training_map2.jpg', self.img)
 
-        origin_img = np.copy(img)
+        origin_img = np.copy(self.img)
 
         car_coord = np.array(self.start_coord).astype(float)
         start_vec = np.array(self.second_coord)-np.array(self.start_coord)
@@ -111,21 +112,23 @@ class SelfDriving:
         step_car = self.rotate_coord(np.array([0, -1]), angle)
 
         print('Start training')
+
         print(car_coord, self.car_size, angle, self.car_color)
-        cv2.ellipse(img, (car_coord, self.car_size, angle), self.car_color, -1)
+        cv2.ellipse(self.img, (car_coord, self.car_size, angle), self.car_color, -1)
         sensor_input = []
         desired_operation = []
         while self.mode == 'training':
+            self.put_label('Making Map => Training', 20, 50)
 
-            cv2.imshow(self.window_title, img)
+            cv2.imshow(self.window_title, self.img)
             k = cv2.waitKey(1) & 0xFF
 
             vec = self.rotate_coord([0,-self.car_size[1]], angle)
             if all(car_coord+vec+step_car <= self.window_size) and all(car_coord+vec+step_car >= [0,0]):
                 car_coord += step_car
             cv_car_coord = np.array(car_coord).astype(float)
-            img = np.copy(origin_img)
-            cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
+            self.img = np.copy(origin_img)
+            cv2.ellipse(self.img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
 
 
             _front_x = np.linspace(cv_car_coord[0]-self.road_width*2, cv_car_coord[0]+self.road_width*2, num=self.car_sensor_num).astype(int)
@@ -136,12 +139,12 @@ class SelfDriving:
                 front = self.rotate_coord(coord-car_coord, angle).astype(float)
                 front_coord = cv_car_coord+front
 
-                front_coord[1] = np.where(front_coord[1] >= img.shape[0], img.shape[0]-1, front_coord[1])
-                front_coord[0] = np.where(front_coord[0] >= img.shape[1], img.shape[1]-1, front_coord[0])
+                front_coord[1] = np.where(front_coord[1] >= self.img.shape[0], self.img.shape[0]-1, front_coord[1])
+                front_coord[0] = np.where(front_coord[0] >= self.img.shape[1], self.img.shape[1]-1, front_coord[0])
                 front_coord = np.where(front_coord < 0, 0, front_coord)
                 
-                d.append(1 if list(img[int(front_coord[1]),int(front_coord[0])])==list(self.road_color) else 0)
-                cv2.circle(img, (front_coord-2).astype(int), 1, (0,255,255), -1)
+                d.append(1 if list(self.img[int(front_coord[1]),int(front_coord[0])])==list(self.road_color) else 0)
+                cv2.circle(self.img, (front_coord-2).astype(int), 1, (0,255,255), -1)
 
             sensor_input.append(np.array(d))
 
@@ -157,8 +160,8 @@ class SelfDriving:
                     angle = -180 + (abs(angle)-180)
                 step_car = self.rotate_coord(step_car, self.step_deg)
 
-                img = np.copy(origin_img)
-                cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
+                self.img = np.copy(origin_img)
+                cv2.ellipse(self.img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
                 print('angle: ', angle)
 
                 desired_operation.append(list(np.eye(3)[2]))
@@ -170,8 +173,8 @@ class SelfDriving:
                     angle = 180 - (abs(angle)-180)
                 step_car = self.rotate_coord(step_car, -self.step_deg)
 
-                img = np.copy(origin_img)
-                cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
+                self.img = np.copy(origin_img)
+                cv2.ellipse(self.img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
                 print('angle: ', angle)
 
                 desired_operation.append(list(np.eye(3)[0]))
@@ -196,10 +199,11 @@ class SelfDriving:
         self.second_click = True
 
         self.make_image()
-        img = self.img
 
         while self.mode == 'prediction':
-            cv2.imshow(self.window_title, img)
+            self.put_label('Making Test Map', 20, 50)
+
+            cv2.imshow(self.window_title, self.img)
             k = cv2.waitKey(1) & 0xFF
 
             if k != 255:
@@ -210,10 +214,10 @@ class SelfDriving:
             elif k == ord('e'):
                 sys.exit(0)
 
-        origin_img = np.copy(img)
+        origin_img = np.copy(self.img)
 
         print('Write prediction map')
-        cv2.imwrite('./prediction_map2.jpg', img)
+        cv2.imwrite('./prediction_map2.jpg', self.img)
 
         car_coord = np.array(self.start_coord).astype(float)
         start_vec = np.array(self.second_coord)-np.array(self.start_coord)
@@ -221,21 +225,23 @@ class SelfDriving:
         step_car = self.rotate_coord(np.array([0, -1]), angle)
 
         print('Start prediction')
-        cv2.ellipse(img, (car_coord, self.car_size, angle), self.car_color, -1)
+        cv2.ellipse(self.img, (car_coord, self.car_size, angle), self.car_color, -1)
         data = []
         outputs = []
-        img = np.copy(origin_img)
+        self.img = np.copy(origin_img)
         time.sleep(1)
         while self.mode == 'run':
-            cv2.imshow(self.window_title, img)
+            self.put_label('Making Test Map => Test Run', 20, 50)
+
+            cv2.imshow(self.window_title, self.img)
             k = cv2.waitKey(1) & 0xFF
 
             vec = self.rotate_coord([0,-self.car_size[1]], angle)
             if all(car_coord+vec+step_car <= self.window_size) and all(car_coord+vec+step_car >= [0,0]):
                 car_coord += step_car
             cv_car_coord = np.array(car_coord).astype(float)
-            img = np.copy(origin_img)
-            cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
+            self.img = np.copy(origin_img)
+            cv2.ellipse(self.img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
 
 
             _front_x = np.linspace(cv_car_coord[0]-self.road_width*2, cv_car_coord[0]+self.road_width*2, num=self.car_sensor_num).astype(int)
@@ -246,12 +252,12 @@ class SelfDriving:
                 front = self.rotate_coord(coord-car_coord, angle).astype(float)
                 front_coord = cv_car_coord+front
 
-                front_coord[1] = np.where(front_coord[1] >= img.shape[0], img.shape[0]-1, front_coord[1])
-                front_coord[0] = np.where(front_coord[0] >= img.shape[1], img.shape[1]-1, front_coord[0])
+                front_coord[1] = np.where(front_coord[1] >= self.img.shape[0], self.img.shape[0]-1, front_coord[1])
+                front_coord[0] = np.where(front_coord[0] >= self.img.shape[1], self.img.shape[1]-1, front_coord[0])
                 front_coord = np.where(front_coord < 0, 0, front_coord)
 
-                d.append(1 if list(img[int(front_coord[1]),int(front_coord[0])])==list(self.road_color) else 0)
-                cv2.circle(img, (front_coord-2).astype(int), 1, (0,255,255), -1)
+                d.append(1 if list(self.img[int(front_coord[1]),int(front_coord[0])])==list(self.road_color) else 0)
+                cv2.circle(self.img, (front_coord-2).astype(int), 1, (0,255,255), -1)
 
             data.append(d)
 
@@ -272,8 +278,8 @@ class SelfDriving:
                     angle = -180 + (abs(angle)-180)
                 step_car = self.rotate_coord(step_car, self.step_deg)
 
-                img = np.copy(origin_img)
-                cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
+                self.img = np.copy(origin_img)
+                cv2.ellipse(self.img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
 
 
             elif all(output == list(np.eye(3)[0])):
@@ -282,8 +288,8 @@ class SelfDriving:
                     angle = 180 - (abs(angle)-180)
                 step_car = self.rotate_coord(step_car, -self.step_deg)
 
-                img = np.copy(origin_img)
-                cv2.ellipse(img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
+                self.img = np.copy(origin_img)
+                cv2.ellipse(self.img, (cv_car_coord, self.car_size, angle), self.car_color, -1)
                 print('angle: ', angle)
 
 
@@ -308,6 +314,7 @@ if __name__ == '__main__':
 
     plt.figure(figsize=(20,10))
     plt.pcolor(np.flip(weight, axis=0))
+    plt.title('Weight map')
     plt.colorbar()
     plt.savefig('weight.png')
 
